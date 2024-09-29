@@ -1,6 +1,16 @@
 # Audio Dataset Maker
 
+Curating datasets is extremely time consuming and tedious. I needed a way to automate this process as much as possible. 
+
 **__Goal__**: Automate the creation and curation of an audio dataset for fine-tuneing/training text-to-speech models.
+
+## What this project does: ##
+   1. Transcription using whisper/deepgram. I am using their API because it is significantly faster. Using whipser locally can be an option to.
+   2. Segmentation and forcing a gaussian distribution of text/audio data segments between 1.2-15 seconds long.
+   3. Creation of metadata according to the segmented audio. This is the transcriptions to pair with the audio files.
+   4. Analyzing the audio using the SI-SDR, PESQ, STOI, c50, and SNR metrics.
+   5. Filters the dataset, removing any audio that does not meet the threshold according to those metrics
+   6. Creates a Huggingface Hub dataset repository as well as places the dataset on your drive
 
 > Automation requires a high degree of reliability and consistency to be effective. Unfortunately, current speaker diarization technology does not meet the rigorous standards necessary for fully automated transcription. For optimal results, it is recommended to use this project with a single speaker dataset.
 
