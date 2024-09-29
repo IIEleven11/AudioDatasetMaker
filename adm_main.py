@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pydub import AudioSegment
 from deepgram_captions import DeepgramConverter
-from datasets import load_dataset, Audio, load_from_disk
+from datasets import load_dataset, Audio, load_from_disk, DatasetDict
 from datasets.features.features import require_decoding
 from datasets.download.streaming_download_manager import xgetsize
 from datasets.utils.py_utils import convert_file_size_to_int
@@ -43,16 +43,6 @@ def collect_USER_INPUTS():
         'HUGGINGFACE_TOKEN': HUGGINGFACE_TOKEN
     }
     return inputs
-
-
-def create_and_push_dataset(CSV_FILE_PATH, REPO_NAME):
-    # Load the dataset from CSV
-    dataset = load_dataset('csv', data_files={"train": CSV_FILE_PATH}, delimiter="|")
-    
-    # Cast the audio column to Audio type
-    dataset = dataset.cast_column("audio", Audio(sampling_rate=44100))
-    dataset.push_to_hub(REPO_NAME, private=True)
-    print(f"Dataset successfully pushed to Hugging Face Hub under {REPO_NAME}.")
 
 
 async def transcribe_audio(file_path, dg_client, options, JSON_DIR_PATH):
@@ -170,13 +160,27 @@ def segment_audio_and_create_metadata(SRT_DIR_PATH, AUDIO_DIR_PATH, WAVS_DIR, PA
                     audio_segment.export(segment_filepath, format="wav")
                     print(f"Segment {index} saved to {segment_filepath}")
 
-                    # prepend the full path to the audio file
+ 
                     full_audio_path = os.path.join(WAVS_DIR, segment_filename)
                     csv_writer.writerow([full_audio_path, text, SPEAKER_NAME])
             else:
                 print(f"No corresponding audio file found for {srt_file}")
     print("All segments have been processed and saved.")
     print(f"CSV file has been saved to {CSV_FILE_PATH}")
+
+
+def split_dataset(PARENT_CSV, eval_percentage, train_dir_path, eval_dir_path):
+    train_df = pd.read_csv(PARENT_CSV, delimiter="|")
+    num_rows_to_move = int(len(train_df) * eval_percentage / 100)
+    rows_to_move = train_df.sample(n=num_rows_to_move, random_state=42)
+    train_df = train_df.drop(rows_to_move.index)
+    eval_df = rows_to_move
+    train_file_path = os.path.join(train_dir_path, "metadata_train.csv")
+    eval_file_path = os.path.join(eval_dir_path, "metadata_eval.csv")
+    train_df.to_csv(train_file_path, sep="|", index=False)
+    eval_df.to_csv(eval_file_path, sep="|", index=False)
+
+    print(f"Moved {num_rows_to_move} rows from {PARENT_CSV} to {eval_file_path}")
 
 
 def save_dataset_to_parquet(dataset_dict, data_dir):
@@ -218,6 +222,16 @@ def save_dataset_to_parquet(dataset_dict, data_dir):
             shard.to_parquet(shard_path)
         
         print(f"Dataset split '{split_name}' saved as Parquet files in {data_dir}")
+
+
+
+def create_and_push_dataset(PARENT_CSV, COMBINED_USERNAME_REPOID):
+    dataset = DatasetDict.from_csv({"train": PARENT_CSV}, delimiter="|")
+    dataset = dataset.cast_column("audio", Audio(sampling_rate=44100))
+    dataset.push_to_hub(COMBINED_USERNAME_REPOID, private=True)
+
+    print(f"Dataset successfully pushed to Hugging Face Hub under {COMBINED_USERNAME_REPOID}.")
+
 
 
 def run_initial_processing(COMBINED_USERNAME_REPOID, REPO_NAME):
@@ -289,23 +303,6 @@ def filter_parquet_files(UNFILTERED_PARQUET_DIR):
         print(f"Error: {e.stderr}")
 
 
-def split_dataset(PARENT_CSV, eval_percentage, train_dir_path, eval_dir_path):
-    train_df = pd.read_csv(PARENT_CSV, delimiter="|")
-    num_rows_to_move = int(len(train_df) * eval_percentage / 100)
-    rows_to_move = train_df.sample(n=num_rows_to_move, random_state=42)
-    train_df = train_df.drop(rows_to_move.index)
-    eval_df = rows_to_move
-    train_file_path = os.path.join(train_dir_path, "metadata_train.csv")
-    eval_file_path = os.path.join(eval_dir_path, "metadata_eval.csv")
-    train_df.to_csv(train_file_path, sep="|", index=False)
-    eval_df.to_csv(eval_file_path, sep="|", index=False)
-
-    print(f"Moved {num_rows_to_move} rows from {PARENT_CSV} to {eval_file_path}")
-
-
-def find_parquet_files(directory):
-    return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.parquet')]
-
 async def main():
     USER_INPUTS = collect_USER_INPUTS()
     AUDIO_DIR_PATH = os.path.join(PROJECT_ROOT, "RAW_AUDIO")
@@ -351,10 +348,10 @@ async def main():
 
     # Step 4: Split dataset
     split_dataset(CSV_FILE_PATH, EVAL_PERCENTAGE, TRAIN_DIR_PATH, EVAL_DIR_PATH)
-    
-    
+
+
     # Push the dataset to Hugging Face Hub
-    create_and_push_dataset(CSV_FILE_PATH, REPO_NAME)
+    create_and_push_dataset(CSV_FILE_PATH, COMBINED_USERNAME_REPOID)
 
 
     # Step 5: Run initial processing
@@ -364,8 +361,11 @@ async def main():
     # Step 6: Run metadata_to_text
     bin_edges_path = os.path.join(PROJECT_ROOT, "dataspeech", "examples", "tags_to_annotations", "v02_bin_edges.json")
     text_bins_path = os.path.join(PROJECT_ROOT, "dataspeech", "examples", "tags_to_annotations", "v02_text_bins.json")
+    
     run_metadata_to_text(COMBINED_USERNAME_REPOID, REPO_NAME, bin_edges_path, text_bins_path, UNFILTERED_PARQUET_DIR)
+    
     dataset = run_metadata_to_text(COMBINED_USERNAME_REPOID, REPO_NAME,  bin_edges_path, text_bins_path, UNFILTERED_PARQUET_DIR)
+
     if dataset is not None:
         save_dataset_to_parquet(dataset, UNFILTERED_PARQUET_DIR)
     else:
@@ -382,24 +382,13 @@ async def main():
 
 
     # Step 8: Push the filtered dataset to Hugging Face Hub
-    parquet_files = find_parquet_files(FILTERED_PARQUET)
-    if not parquet_files:
-        raise FileNotFoundError(f"No Parquet files found in {FILTERED_PARQUET}")
-
-    # Create a dictionary mapping split names to file lists (Not using splits but its here if you need it)
-    data_files = {}
-    for file in parquet_files:
-        split_name = os.path.basename(file).split('-')[0]
-        if split_name not in data_files:
-            data_files[split_name] = []
-        data_files[split_name].append(file)
-
-    dataset = load_dataset('parquet', data_files=data_files)
-    dataset.push_to_hub(REPO_NAME, private=True)
+    dataset = load_dataset(FILTERED_PARQUET)
+    dataset = dataset.cast_column("audio", Audio(sampling_rate=44100))
     
-    print(f"Dataset successfully pushed to Hugging Face Hub under {COMBINED_USERNAME_REPOID}.")
-    print("Step 8 completed: Filtered dataset pushed to Hugging Face Hub successfully.")
-
-
+    print("Pushing filtered dataset to Hugging Face Hub...")
+    
+    dataset.push_to_hub(COMBINED_USERNAME_REPOID, private=True)
+    print(f"Filtered dataset successfully pushed to Hugging Face Hub under {COMBINED_USERNAME_REPOID}.")
+    
 if __name__ == "__main__":
     asyncio.run(main())

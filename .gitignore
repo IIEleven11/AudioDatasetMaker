@@ -13,6 +13,13 @@ PARENT_CSV/*
 SRTS/*
 UNFILTERED_PARQUET/*
 WAVS/*
+temp
+UNFILTERED_PARQUET/*
+FILTERED_PARQUET/*
+PARENT_CSV/*
+/dataspeech/*
+convert_dataspeech.py
+
 
 # Except these 
 FINAL/.gitkeep
@@ -25,9 +32,5 @@ METADATA/.gitkeep
 PARENT_CSV/.gitkeep
 SRTS/.gitkeep
 UNFILTERED_PARQUET/.gitkeep
+FILTERED_PARQUET/.gitkeep   
 WAVS/.gitkeep
-temp
-UNFILTERED_PARQUET/train
-FILTERED_PARQUET/train-00000-of-00001.parquet
-PARENT_CSV/metadata.csv
-dataspeech/dataspeech.egg-info
