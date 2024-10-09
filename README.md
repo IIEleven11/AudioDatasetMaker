@@ -26,7 +26,8 @@ Curating datasets is extremely time consuming and tedious. I needed a way to aut
    - Windows: https://git-lfs.com/ download then:  git lfs install 
 5. Get a deepgram API key from https://deepgram.com/dashboard/signup
 6. Set HUGGINGFACE_TOKEN environment variable within your OS.
-7. In your terminal login to Hugging Face Hub by typing: ```huggingface-cli login```
+7. Set DEEPGRAM_API_KEY environment variable within your OS.
+8. In your terminal login to Hugging Face Hub by typing: ```huggingface-cli login```
 
 ## Usage
 1. Put your audio files in the RAW_AUDIO folder

@@ -34,3 +34,8 @@ SRTS/.gitkeep
 UNFILTERED_PARQUET/.gitkeep
 FILTERED_PARQUET/.gitkeep   
 WAVS/.gitkeep
+WAVS_DIR_PREDENOISE
+WAVS_DIR_POSTDENOISE
+zzzzzzzzz
+dgtester.py
+.gitignore
